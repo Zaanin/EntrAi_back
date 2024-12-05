@@ -84,12 +84,17 @@ def verificar_ou_criar_pickle(turma_id: int, fotos, turma_dados):
     # Atualizar o pickle com os novos alunos
     alunos_processados = []
     for aluno_id, aluno_nome, imagem in fotos:
+        # Converter a imagem para RGB caso não esteja nesse formato
+        if imagem.mode != "RGB":
+            imagem = imagem.convert("RGB")
+        
         # Gerar codificações faciais
         imagem_np = np.array(imagem)
         codificacao = face_encodings(imagem_np)
         if codificacao:
             dados_pickle[aluno_id] = {"nome": aluno_nome, "codificacao": codificacao[0]}
             alunos_processados.append(aluno_id)  # Marca o aluno como processado
+
 
     # Salvar o arquivo atualizado
     with open(caminho_arquivo, "wb") as f:

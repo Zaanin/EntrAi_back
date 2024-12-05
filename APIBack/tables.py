@@ -4,7 +4,7 @@ import psycopg2
 DB_CONFIG = {
     'dbname': 'scannia',
     'user': 'postgres',
-    'password': '123',
+    'password': 'postgres',
     'host': 'localhost',  # Altere para o endereço do servidor, se necessário
     'port': 5432          # Porta padrão do PostgreSQL
 }

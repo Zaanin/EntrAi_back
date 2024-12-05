@@ -10,14 +10,15 @@ app = FastAPI()
 
 # Configurações do CORS
 origins = [
-    "http://localhost",           # Para permitir localhost
+    "http://localhost:8082",           # Para permitir localhost
     "http://localhost:3000",      # Para front-end rodando na porta 3000
+    "https://599e-2804-4bd0-485-5900-842a-8d71-c552-d2e3.ngrok-free.app"
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,          # Lista de origens permitidas
-    allow_credentials=True,         # Permite envio de cookies
+    allow_credentials=False,         # Permite envio de cookies
     allow_methods=["*"],            # Permite todos os métodos HTTP
     allow_headers=["*"],            # Permite todos os cabeçalhos
 )

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, EmailStr
 import psycopg2
+import bcrypt
 from typing import List
 
 # Criar o roteador
@@ -39,6 +40,9 @@ class UsuarioResponse(BaseModel):
 @router.post("/usuarios/", response_model=UsuarioResponse)
 async def create_usuario(usuario: Usuario):
     try:
+        # Gerar o hash da senha
+        hashed_password = bcrypt.hashpw(usuario.senha.encode('utf-8'), bcrypt.gensalt())
+
         # Conectar ao banco de dados
         conn = get_db_connection()
         cur = conn.cursor()
@@ -47,7 +51,7 @@ async def create_usuario(usuario: Usuario):
         cur.execute("""
             INSERT INTO usuarios (nome, email, senha, papel)
             VALUES (%s, %s, %s, %s) RETURNING id, nome, email, papel, senha, data_criacao;
-        """, (usuario.nome, usuario.email, usuario.senha, usuario.papel))
+        """, (usuario.nome, usuario.email, hashed_password.decode('utf-8'), usuario.papel))
 
         # Recuperar o usuário inserido
         new_user = cur.fetchone()
@@ -69,6 +73,7 @@ async def create_usuario(usuario: Usuario):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao criar usuário: {e}")
+
 
 # Endpoint para listar todos os usuários
 @router.get("/usuarios/", response_model=List[UsuarioResponse])

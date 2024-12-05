@@ -13,7 +13,7 @@ import psycopg2
 DB_CONFIG = {
     'dbname': 'scannia',
     'user': 'postgres',
-    'password': '123',
+    'password': 'postgres',
     'host': 'localhost',  # Altere para o endereço do servidor, se necessário
     'port': 5432          # Porta padrão do PostgreSQL
 }
@@ -25,16 +25,31 @@ try:
 except Exception as e:
     print(f"Erro ao conectar com o banco: {e}")
 
-
 # Configurações iniciais
 limiar = 0.6  # Tolerância para reconhecimento facial
+# Carregar codificações salvas de todos os arquivos da pasta pickle_files
 nomes = []
 encods = []
+pickle_dir = "pickle_files"
 
-# Carregar codificações salvas
-if os.path.exists('codificacoes.pkl'):
-    with open('codificacoes.pkl', 'rb') as f:
-        nomes, encods = pickle.load(f)
+if os.path.exists(pickle_dir):
+    for file_name in os.listdir(pickle_dir):
+        if file_name.endswith('.pkl'):
+            file_path = os.path.join(pickle_dir, file_name)
+            try:
+                with open(file_path, 'rb') as f:
+                    print(file_path)
+                    data = pickle.load(f)
+                    # Verificar se o arquivo contém o formato correto (dicionário)
+                    if isinstance(data, dict):
+                        for aluno_id, aluno_info in data.items():
+                            nomes.append(aluno_info['nome'])
+                            encods.append(aluno_info['codificacao'])
+                    else:
+                        print(f"Formato inválido em {file_name}: deve conter um dicionário.")
+            except Exception as e:
+                print(f"Erro ao carregar o arquivo {file_name}: {e}")
+
 
 # Função para comparar codificações
 def compararEnc(EncImg):
@@ -43,6 +58,9 @@ def compararEnc(EncImg):
         if distancia < limiar:
             return True, nomes[id]
     return False, None
+
+# Resto do código permanece o mesmo
+
 
 # Função de análise de textura usando LBP
 def verificar_textura(img, raio=3, n_points=24):
@@ -61,7 +79,7 @@ def verificar_qualidade(img):
 mp_face_mesh = mp.solutions.face_mesh
 
 # Configuração da captura de vídeo
-cap = cv2.VideoCapture(2)
+cap = cv2.VideoCapture(0)
 cap.set(cv2.CAP_PROP_FPS, 120)
 
 width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
@@ -133,10 +151,6 @@ with mp_face_mesh.FaceMesh(max_num_faces=1, refine_landmarks=True, min_detection
                         if blinkCount >= piscadas_necessarias:
                             reconhecimento_pendente = True
 
-                # Mostrar contador de piscadas
-                #font = cv2.FONT_HERSHEY_SIMPLEX
-                #cv2.putText(image, f"Piscadas: {blinkCount}", (50, 50), font, 1, (0, 255, 0), 2, cv2.LINE_AA)
-
         # Reconhecimento facial após validação completa
         if reconhecimento_pendente:
             # Verificar qualidade e textura da imagem
@@ -147,17 +161,31 @@ with mp_face_mesh.FaceMesh(max_num_faces=1, refine_landmarks=True, min_detection
                     face_encoding = fr.face_encodings(imgRGB, face_locations)
                     if face_encoding:
                         match, name = compararEnc(face_encoding[0])
-                        cvzone.putTextRect(image, name if match else 'Desconhecido', (50, 100), 2, 2, colorB=(0, 255, 0) if match else (0, 0, 255))
+                        cvzone.putTextRect(image, name if 'Acesso liberado' else 'Desconhecido', (50, 100), 2, 2, colorB=(0, 255, 0) if match else (0, 0, 255))
                         if match:
-                            cur.execute("""INSERT INTO logs values ('VALIDACAO','RECONHECIMENTO','TESTE','2024-08-12 13:12:00','USUARIO VALIDADO',));
-                            """)
-                            
+                            # Execute a query passando os dados corretamente
+                            cur.execute("""
+                                INSERT INTO logs (tabela_afetada,acao,usuario,data_hora,detalhe)
+                                VALUES ('ALUNOS', 'RECONHECIMENTO', %s, '2024-08-12 13:12:00', 'USUARIO VALIDADO');
+                            """, (name,))
+
                             # Confirmar as mudanças
                             conn.commit()
                             
             reconhecimento_pendente = False  # Resetar para aguardar próxima validação
             blinkCount = 0  # Resetar piscadas para novo ciclo
 
+        rows, cols, _ = image.shape
+        center = (cols // 2, rows // 2)
+        axes = (int(cols * 0.3), int(rows * 0.4))  # Largura e altura da elipse
+        color = (255, 255, 255)  # Cor branca
+        thickness = 1  # Espessura da linha
+        gap = 10  # Espaço entre os pontos
+        for angle in range(0, 360, gap):
+            x = int(center[0] + axes[0] * math.cos(math.radians(angle)))
+            y = int(center[1] + axes[1] * math.sin(math.radians(angle)))
+            cv2.circle(image, (x, y), 2, color, -1)
+            
         # Exibir frame na tela
         cv2.imshow('Video', image)
 
