@@ -21,7 +21,7 @@ def recuperar_fotos_por_turma(turma_id: int):
         host="localhost",
         database="scannia",
         user="postgres",
-        password="123"
+        password="postgres"
     )
     cur = conn.cursor()
 
@@ -118,7 +118,7 @@ def marcar_como_processado(aluno_ids):
         host="localhost",
         database="scannia",
         user="postgres",
-        password="123"
+        password="postgres"
     )
     cur = conn.cursor()
 

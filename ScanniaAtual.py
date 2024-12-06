@@ -9,6 +9,7 @@ from mediapipe.python.solutions.drawing_utils import _normalized_to_pixel_coordi
 import pickle
 from skimage.feature import local_binary_pattern
 import psycopg2
+import io
 
 DB_CONFIG = {
     'dbname': 'scannia',
@@ -75,6 +76,25 @@ def verificar_qualidade(img):
     laplacian_var = cv2.Laplacian(img, cv2.CV_64F).var()
     return laplacian_var > 100
 
+
+# Função para capturar a foto e converter para o formato BYTEA
+def capturar_foto(image):
+    # Captura da foto com a região do rosto
+    face_location = fr.face_locations(image)
+    if face_location:
+        imgRGB = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        face_encoding = fr.face_encodings(imgRGB, face_location)
+        if face_encoding:
+            # Criar uma cópia da imagem de rosto detectado
+            top, right, bottom, left = face_location[0]
+            face_image = image[top:bottom, left:right]
+            
+            # Converter a imagem para o formato binário (BYTEA)
+            _, buffer = cv2.imencode('.jpg', face_image)
+            face_photo = buffer.tobytes()
+            return face_photo
+    return None
+
 # Inicialização do MediaPipe
 mp_face_mesh = mp.solutions.face_mesh
 
@@ -136,7 +156,7 @@ with mp_face_mesh.FaceMesh(max_num_faces=1, refine_landmarks=True, min_detection
                     if ratio >= closedEyes and piscando:
                         closedEyes = ratio
                         piscando = False
-                    if blinkCount >= 5:
+                    if blinkCount >= 1:
                         blinkMap = closedEyes + (openedEyes - closedEyes) / 2
                         calibrating = False
                         blinkCount = 0
@@ -161,31 +181,47 @@ with mp_face_mesh.FaceMesh(max_num_faces=1, refine_landmarks=True, min_detection
                     face_encoding = fr.face_encodings(imgRGB, face_locations)
                     if face_encoding:
                         match, name = compararEnc(face_encoding[0])
-                        cvzone.putTextRect(image, name if 'Acesso liberado' else 'Desconhecido', (50, 100), 2, 2, colorB=(0, 255, 0) if match else (0, 0, 255))
                         if match:
-                            # Execute a query passando os dados corretamente
-                            cur.execute("""
-                                INSERT INTO logs (tabela_afetada,acao,usuario,data_hora,detalhe)
-                                VALUES ('ALUNOS', 'RECONHECIMENTO', %s, '2024-08-12 13:12:00', 'USUARIO VALIDADO');
-                            """, (name,))
+                            message = "Acesso Liberado"
+                            color = (0, 255, 0)  # Verde para acesso liberado
+                        else:
+                            message = "Desconhecido"
+                            color = (0, 0, 255)  # Vermelho para desconhecido
 
-                            # Confirmar as mudanças
+                        # Exibir a mensagem na tela
+                        cvzone.putTextRect(image, message, (50, 100), 2, 2, colorB=color)
+                        
+                        # Captura da foto do usuário
+                        foto_usuario = capturar_foto(image)
+
+                        # Inserir no banco de dados, incluindo a foto do usuário
+                        if foto_usuario:
+                            # Salvar no banco com o nome ou "Desconhecido"
+                            cur.execute("""
+                                INSERT INTO logs (tabela_afetada, acao, usuario, data_hora, detalhe, foto)
+                                VALUES ('ALUNOS', 'RECONHECIMENTO', %s, CURRENT_TIMESTAMP, %s, %s);
+                            """, (name if match else "Desconhecido", "USUARIO VALIDADO" if match else "TENTATIVA DE ACESSO", psycopg2.Binary(foto_usuario)))
                             conn.commit()
-                            
+
             reconhecimento_pendente = False  # Resetar para aguardar próxima validação
             blinkCount = 0  # Resetar piscadas para novo ciclo
 
+
+        # Adicionar oval pontilhado na vertical
         rows, cols, _ = image.shape
-        center = (cols // 2, rows // 2)
-        axes = (int(cols * 0.3), int(rows * 0.4))  # Largura e altura da elipse
-        color = (255, 255, 255)  # Cor branca
-        thickness = 1  # Espessura da linha
-        gap = 10  # Espaço entre os pontos
+        center = (cols // 2, rows // 2)  # Centro do frame
+        axes = (int(cols * 0.2), int(rows * 0.45))  # Altura maior e largura menor
+        color = (255, 255, 255)  # Cor branca dos pontos
+        gap = 9 # Espaçamento entre os pontos
+        point_size = 7  # Tamanho dos pontos
+
+        # Gerar pontos ao longo da elipse
         for angle in range(0, 360, gap):
-            x = int(center[0] + axes[0] * math.cos(math.radians(angle)))
-            y = int(center[1] + axes[1] * math.sin(math.radians(angle)))
-            cv2.circle(image, (x, y), 2, color, -1)
-            
+            x = int(center[0] + axes[0] * math.cos(math.radians(angle)))  # Coordenada X
+            y = int(center[1] + axes[1] * math.sin(math.radians(angle)))  # Coordenada Y
+            cv2.circle(image, (x, y), point_size, color, -1)  # Desenhar ponto
+
+
         # Exibir frame na tela
         cv2.imshow('Video', image)
 

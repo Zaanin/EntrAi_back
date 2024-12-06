@@ -12,7 +12,7 @@ def get_db_connection():
         host="localhost",
         database="scannia",
         user="postgres",
-        password="123"
+        password="postgres"
     )
     return connection
 
